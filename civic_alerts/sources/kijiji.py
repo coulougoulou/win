@@ -117,15 +117,24 @@ def _attributes(node: dict) -> dict[str, str]:
     """Aplati la liste d'attributs Kijiji en {nom normalise: valeur}."""
     flat: dict[str, str] = {}
     raw = node.get("attributes")
+    # Kijiji emballe la liste dans {"__typename": ..., "all": [...]}.
     if isinstance(raw, dict):
-        raw = [{"name": key, "value": value} for key, value in raw.items()]
+        nested = next((value for value in raw.values() if isinstance(value, list)), None)
+        raw = nested if nested is not None else [
+            {"name": key, "value": value} for key, value in raw.items()
+        ]
     if not isinstance(raw, list):
         return flat
     for item in raw:
         if not isinstance(item, dict):
             continue
-        name = item.get("name") or item.get("canonicalName") or item.get("key")
-        value = item.get("value") or item.get("canonicalValue") or item.get("values")
+        name = item.get("canonicalName") or item.get("name") or item.get("key")
+        value = (
+            item.get("canonicalValues")
+            or item.get("values")
+            or item.get("canonicalValue")
+            or item.get("value")
+        )
         if isinstance(value, list):
             value = " ".join(str(part) for part in value)
         if isinstance(name, str) and value is not None:

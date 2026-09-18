@@ -8,8 +8,11 @@ from __future__ import annotations
 
 import re
 
-_PRICE_RE = re.compile(r"(\d[\d\s.,]{2,})\s*\$|\$\s*(\d[\d\s.,]{2,})")
-_ODOMETER_RE = re.compile(r"(\d[\d\s.,]*)\s*(?:km|kilom)", re.IGNORECASE)
+# Un montant s'ecrit en groupes de trois chiffres ("13 995", "12,995", "7500").
+# Sans cette contrainte, "2019 13 995 $" se lisait comme un seul nombre.
+_AMOUNT = r"\d{1,3}(?:[\s.,]\d{3})+|\d{3,6}"
+_PRICE_RE = re.compile(rf"({_AMOUNT})\s*\$|\$\s*({_AMOUNT})")
+_ODOMETER_RE = re.compile(rf"({_AMOUNT})\s*(?:km|kilom)", re.IGNORECASE)
 _YEAR_RE = re.compile(r"\b(19[89]\d|20[0-4]\d)\b")
 
 _AUTOMATIC_HINTS = ("automatique", "automatic", "auto.", "cvt", "a/t", "boite auto")

@@ -47,6 +47,7 @@ def listings_from_anchors(
     base_url: str,
     href_pattern: re.Pattern[str],
     id_pattern: re.Pattern[str],
+    title_builder=None,
 ) -> list[Listing]:
     soup = BeautifulSoup(html, "html.parser")
     found: dict[str, Listing] = {}
@@ -62,8 +63,12 @@ def listings_from_anchors(
         if listing_id in found:
             continue
 
-        title = anchor.get_text(" ", strip=True) or anchor.get("title", "")
+        anchor_text = anchor.get_text(" ", strip=True) or anchor.get("title", "")
         context = _block_text(anchor, href_pattern)
+        if title_builder is not None:
+            title = title_builder(href, anchor_text, context)
+        else:
+            title = anchor_text
         # Le titre vient parfois d'un lien image vide : on retombe sur le bloc.
         if len(title) < 8:
             title = context[:120]

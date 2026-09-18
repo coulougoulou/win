@@ -14,7 +14,7 @@ from civic_alerts.config import Criteria
 from civic_alerts.models import Listing
 from civic_alerts.parsing import parse_odometer, parse_price, parse_transmission, parse_year
 from civic_alerts.sources._html import listings_from_anchors
-from civic_alerts.sources import kijiji
+from civic_alerts.sources import autohebdo, kijiji
 
 CRITERIA = Criteria()
 
@@ -29,6 +29,10 @@ def test_parsing():
     check("prix avec espace", parse_price("14 500 $"), 14500)
     check("prix avec virgule", parse_price("$12,995"), 12995)
     check("prix bruit ignore", parse_price("lot 42"), None)
+    # Cas reel : sur une carte AutoHebdo, l'annee precede le prix.
+    check("annee collee au prix", parse_price("2019 13 995 $"), 13995)
+    check("km non avale par l'annee", parse_odometer("2019 96 000 km"), 96000)
+    check("prix simple", parse_price("7500 $"), 7500)
     check("km francais", parse_odometer("142 000 km"), 142000)
     check("km anglais", parse_odometer("98,500 KM"), 98500)
     check("km faux positif", parse_odometer("2 km du metro"), None)
@@ -104,9 +108,14 @@ NEXT_DATA = {
          "price": {"__typename": "AutosDealerAmountPrice", "amount": 1449500},
          "location": {"name": "Rive-Sud", "address": "Saint-Hubert, QC",
                       "coordinates": {"latitude": 45.4940, "longitude": -73.4180}},
-         "attributes": [{"name": "carmileageinkms", "value": "88000"},
-                        {"name": "cartransmission", "value": "automatic"},
-                        {"name": "carbodytype", "value": "sedan"}]}
+         "attributes": {"__typename": "AutosListingAttributes", "all": [
+             {"__typename": "ListingAttributeV2", "canonicalName": "vehicletype",
+              "canonicalValues": ["used"]},
+             {"__typename": "ListingAttributeV2", "canonicalName": "carmileageinkms",
+              "canonicalValues": ["88000"]},
+             {"__typename": "ListingAttributeV2", "canonicalName": "cartransmission",
+              "canonicalValues": ["automatic"]},
+         ]}}
     ]}}}
 }
 
@@ -163,6 +172,31 @@ def test_english_manual():
     check("6-Spd detecte", parse_transmission("6-Spd Manual"), "manual")
 
 
+AUTOHEBDO_HTML = """
+<html><body>
+<div class="card">
+  <a href="/annonces/honda-civic-sport-toit-mags-sieges-chauffants-essence-noir-cat_ma31gr200622va2411tr7208-3c3aa366-12e2-4d81-8297-59b895f42480">Ouvrir les détails de l'annonce</a>
+  <div><span>2019</span><span>13 995 $</span><span>96 000 km</span></div>
+</div>
+</body></html>
+"""
+
+
+def test_autohebdo_parsing():
+    print("autohebdo")
+    found = autohebdo._parse(AUTOHEBDO_HTML)
+    check("une annonce", len(found), 1)
+    item = found[0]
+    # Le libelle du lien est generique : le titre doit venir du slug de l'URL.
+    check("titre reconstruit", "civic" in item.title.lower() and "sport" in item.title.lower(), True)
+    check("libelle generique ecarte", "ouvrir les" not in item.title.lower(), True)
+    check("annee tiree du bloc", item.year, 2019)
+    check("prix", item.price, 13995)
+    check("km", item.odometer_km, 96000)
+    check("id = uuid", item.listing_id, "3c3aa366-12e2-4d81-8297-59b895f42480")
+    check("passe les filtres", filters.matches(item, CRITERIA)[0], True)
+
+
 def test_state(tmp: Path):
     print("etat")
     path = tmp / "seen.json"
@@ -195,6 +229,7 @@ if __name__ == "__main__":
     test_kijiji_next_data()
     test_geo()
     test_coordinates_beat_city_table()
+    test_autohebdo_parsing()
     test_english_manual()
     with tempfile.TemporaryDirectory() as tmpdir:
         test_state(Path(tmpdir))
