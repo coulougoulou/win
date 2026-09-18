@@ -42,3 +42,14 @@ Connecte a MonBroker-Demo (build terminal 5000)
 - Commence sur un **compte demo** avant de pointer vers un compte reel.
 - Le mot de passe *investisseur* (lecture seule) suffit si tu ne veux que
   consulter le compte sans passer d'ordres.
+
+---
+
+## Alertes Honda Civic Sport
+
+Ce depot contient aussi un job quotidien qui surveille les annonces de Honda
+Civic Sport (2017+, 170 000 km ou moins, automatique, 15 000 $ ou moins, dans un
+rayon de 1000 km de Saint-Hubert) sur Kijiji Autos et AutoHebdo, et envoie les
+nouveautes sur Telegram.
+
+Voir [`civic_alerts/README.md`](civic_alerts/README.md).

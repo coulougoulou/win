@@ -1,0 +1,63 @@
+name: Alertes Honda Civic Sport
+
+on:
+  schedule:
+    # 12:13 UTC = 8h13 heure de l'Est l'ete, 7h13 l'hiver.
+    - cron: "13 12 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Afficher les resultats sans envoyer sur Telegram"
+        type: boolean
+        default: false
+      verbose:
+        description: "Journaliser aussi les annonces rejetees"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: civic-alerts
+  cancel-in-progress: false
+
+jobs:
+  search:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: civic_alerts/requirements.txt
+
+      - name: Installer les dependances
+        run: pip install -r civic_alerts/requirements.txt
+
+      - name: Tests hors-ligne
+        run: python tests/test_civic_alerts.py
+
+      - name: Chercher et notifier
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python -m civic_alerts.main \
+            ${{ inputs.dry_run && '--dry-run --no-state' || '' }} \
+            ${{ inputs.verbose && '--verbose' || '' }}
+
+      - name: Enregistrer les annonces deja vues
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [[ -n "$(git status --porcelain data/)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/
+            git commit -m "chore: mise a jour des annonces deja notifiees"
+            git push
+          else
+            echo "Aucun changement d'etat a enregistrer."
+          fi

@@ -1,0 +1,157 @@
+"""Tests hors-ligne : parsing, filtres, extraction HTML, etat, formatage."""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from civic_alerts import filters, notify, state
+from civic_alerts.config import Criteria
+from civic_alerts.models import Listing
+from civic_alerts.parsing import parse_odometer, parse_price, parse_transmission, parse_year
+from civic_alerts.sources._html import listings_from_anchors
+from civic_alerts.sources import kijiji
+
+CRITERIA = Criteria()
+
+
+def check(label: str, got, expected):
+    assert got == expected, f"{label}: attendu {expected!r}, obtenu {got!r}"
+    print(f"  ok  {label}")
+
+
+def test_parsing():
+    print("parsing")
+    check("prix avec espace", parse_price("14 500 $"), 14500)
+    check("prix avec virgule", parse_price("$12,995"), 12995)
+    check("prix bruit ignore", parse_price("lot 42"), None)
+    check("km francais", parse_odometer("142 000 km"), 142000)
+    check("km anglais", parse_odometer("98,500 KM"), 98500)
+    check("km faux positif", parse_odometer("2 km du metro"), None)
+    check("annee", parse_year("2018 Honda Civic Sport"), 2018)
+    check("transmission auto", parse_transmission("Boite automatique"), "automatic")
+    check("transmission cvt", parse_transmission("CVT, 4 portes"), "automatic")
+    check("transmission manuelle", parse_transmission("6 vitesses manuelle"), "manual")
+    check("transmission absente", parse_transmission("4 portes"), None)
+
+
+def listing(**kwargs) -> Listing:
+    base = dict(
+        source="test", listing_id="1", title="2019 Honda Civic Sport", url="https://x/1",
+        price=13000, year=2019, odometer_km=90000, transmission="automatic",
+    )
+    base.update(kwargs)
+    return Listing(**base)
+
+
+def test_filters():
+    print("filtres")
+    check("annonce conforme", filters.matches(listing(), CRITERIA)[0], True)
+    check("trop chere", filters.matches(listing(price=18000), CRITERIA)[0], False)
+    check("trop de km", filters.matches(listing(odometer_km=190000), CRITERIA)[0], False)
+    check("trop vieille", filters.matches(listing(year=2015, title="2015 Honda Civic Sport"), CRITERIA)[0], False)
+    check("manuelle rejetee", filters.matches(listing(transmission="manual"), CRITERIA)[0], False)
+    check("transmission inconnue gardee", filters.matches(listing(transmission=None), CRITERIA)[0], True)
+    check("prix inconnu garde", filters.matches(listing(price=None), CRITERIA)[0], True)
+    check("sans Sport rejetee", filters.matches(listing(title="2019 Honda Civic LX"), CRITERIA)[0], False)
+    check("pieces rejetees", filters.matches(listing(title="2019 Honda Civic Sport pour pieces"), CRITERIA)[0], False)
+    check("autre modele rejete", filters.matches(listing(title="2019 Honda Accord Sport"), CRITERIA)[0], False)
+    check("apply", len(filters.apply([listing(), listing(price=90000)], CRITERIA)), 1)
+
+
+KIJIJI_HTML = """
+<html><body>
+<div class="card">
+  <a href="/v-autos-camions/longueuil/2018-honda-civic-sport/1701234567">2018 Honda Civic Sport</a>
+  <div><span>13 495 $</span><span>112 000 km</span><span>Automatique</span></div>
+</div>
+<div class="card">
+  <a href="/v-autos-camions/laval/2017-honda-civic-sport-manuelle/1709876543">2017 Honda Civic Sport</a>
+  <div><span>11 000 $</span><span>155 000 km</span><span>Manuelle</span></div>
+</div>
+<a href="/b-autos-camions/canada/page-2">Page suivante</a>
+</body></html>
+"""
+
+
+def test_html_extraction():
+    print("extraction HTML")
+    found = listings_from_anchors(
+        KIJIJI_HTML, source="kijiji", base_url="https://www.kijiji.ca",
+        href_pattern=re.compile(r"/v-autos-camions/"), id_pattern=re.compile(r"/(\d{9,})(?:$|[/?#])"),
+    )
+    check("nombre d'annonces", len(found), 2)
+    first = next(item for item in found if item.listing_id == "1701234567")
+    check("titre", first.title, "2018 Honda Civic Sport")
+    check("url absolue", first.url, "https://www.kijiji.ca/v-autos-camions/longueuil/2018-honda-civic-sport/1701234567")
+    check("prix", first.price, 13495)
+    check("km", first.odometer_km, 112000)
+    check("annee", first.year, 2018)
+    check("transmission", first.transmission, "automatic")
+    check("lien de pagination ignore", all(item.listing_id.isdigit() for item in found), True)
+    check("manuelle filtree ensuite", len(filters.apply(found, CRITERIA)), 1)
+
+
+NEXT_DATA = {
+    "props": {"pageProps": {"results": {"items": [
+        {"id": "1712345678", "title": "2019 Honda Civic Sport",
+         "url": "/v-autos-camions/rive-sud/2019-honda-civic-sport/1712345678",
+         "price": {"amount": 1449500}, "location": "Saint-Hubert",
+         "attributes": [{"name": "Kilometrage", "value": "88 000 km"},
+                        {"name": "Transmission", "value": "Automatique"}]}
+    ]}}}
+}
+
+
+def test_kijiji_next_data():
+    print("kijiji __NEXT_DATA__")
+    html = f'<script id="__NEXT_DATA__" type="application/json">{json.dumps(NEXT_DATA)}</script>'
+    found = kijiji._from_next_data(html)
+    check("nombre", len(found), 1)
+    item = found[0]
+    check("id", item.listing_id, "1712345678")
+    check("prix en cents converti", item.price, 14495)
+    check("km", item.odometer_km, 88000)
+    check("transmission", item.transmission, "automatic")
+    check("url", item.url.startswith("https://www.kijiji.ca/"), True)
+    check("passe les filtres", filters.matches(item, CRITERIA)[0], True)
+
+
+def test_state(tmp: Path):
+    print("etat")
+    path = tmp / "seen.json"
+    state.save(path, {"kijiji:1": "2026-09-18", "kijiji:2": "2000-01-01"}, ttl_days=90)
+    loaded = state.load(path)
+    check("annonce recente conservee", "kijiji:1" in loaded, True)
+    check("annonce expiree purgee", "kijiji:2" in loaded, False)
+    check("fichier absent -> vide", state.load(tmp / "nope.json"), {})
+    (tmp / "bad.json").write_text("{pas du json")
+    check("fichier corrompu -> vide", state.load(tmp / "bad.json"), {})
+
+
+def test_messages():
+    print("formatage Telegram")
+    messages = notify.build_messages([listing(listing_id=str(i)) for i in range(3)])
+    check("un seul message", len(messages), 1)
+    check("entete", "3 nouvelle(s)" in messages[0], True)
+    check("lien present", 'href="https://x/1"' in messages[0], True)
+    big = notify.build_messages([listing(listing_id=str(i), title="T" * 110) for i in range(60)])
+    check("decoupage sous la limite", all(len(m) <= 3900 for m in big), True)
+    escaped = notify.build_messages([listing(title="Civic Sport <b>aubaine</b> & propre")])
+    check("HTML echappe", "<b>aubaine</b>" not in escaped[0].replace("<b>1", ""), True)
+
+
+if __name__ == "__main__":
+    import tempfile
+    test_parsing()
+    test_filters()
+    test_html_extraction()
+    test_kijiji_next_data()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        test_state(Path(tmpdir))
+    test_messages()
+    print("\nTous les tests passent.")
