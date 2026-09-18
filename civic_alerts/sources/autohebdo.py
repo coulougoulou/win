@@ -15,10 +15,11 @@ log = logging.getLogger(__name__)
 SOURCE = "autohebdo"
 BASE_URL = "https://www.autohebdo.net"
 SEARCH_URL = BASE_URL + "/autos/honda/civic/"
-# Les fiches d'annonce vivent sous /a/<marque>/<modele>/<ville>/<prov>/<id>.
+# Les fiches d'annonce vivent sous /annonces/<slug>-<uuid>, constate en
+# inspectant le HTML reel du site.
 
-_HREF_RE = re.compile(r"/a/honda/civic/", re.IGNORECASE)
-_ID_RE = re.compile(r"/(\d{6,})(?:$|[/?#])")
+_HREF_RE = re.compile(r"/annonces/[^/]*civic", re.IGNORECASE)
+_ID_RE = re.compile(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", re.IGNORECASE)
 
 PAGE_SIZE = 100
 

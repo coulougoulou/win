@@ -96,13 +96,17 @@ def test_html_extraction():
     check("manuelle filtree ensuite", len(filters.apply(found, CRITERIA)), 1)
 
 
+# Forme reelle d'un noeud Kijiji, relevee dans les logs d'une execution.
 NEXT_DATA = {
     "props": {"pageProps": {"results": {"items": [
-        {"id": "1712345678", "title": "2019 Honda Civic Sport",
-         "url": "/v-autos-camions/rive-sud/2019-honda-civic-sport/1712345678",
-         "price": {"amount": 1449500}, "location": "Saint-Hubert",
-         "attributes": [{"name": "Kilometrage", "value": "88 000 km"},
-                        {"name": "Transmission", "value": "Automatique"}]}
+        {"__typename": "AutosListing", "id": "1712345678", "title": "2019 Honda Civic Sport",
+         "url": "https://www.kijiji.ca/v-cars-trucks/rive-sud/2019-honda-civic-sport/1712345678",
+         "price": {"__typename": "AutosDealerAmountPrice", "amount": 1449500},
+         "location": {"name": "Rive-Sud", "address": "Saint-Hubert, QC",
+                      "coordinates": {"latitude": 45.4940, "longitude": -73.4180}},
+         "attributes": [{"name": "carmileageinkms", "value": "88000"},
+                        {"name": "cartransmission", "value": "automatic"},
+                        {"name": "carbodytype", "value": "sedan"}]}
     ]}}}
 }
 
@@ -115,10 +119,24 @@ def test_kijiji_next_data():
     item = found[0]
     check("id", item.listing_id, "1712345678")
     check("prix en cents converti", item.price, 14495)
-    check("km", item.odometer_km, 88000)
-    check("transmission", item.transmission, "automatic")
+    check("km lu dans les attributs", item.odometer_km, 88000)
+    check("transmission lue dans les attributs", item.transmission, "automatic")
+    check("latitude", round(item.latitude, 3), 45.494)
+    check("distance exacte utilisee", geo.within_radius(1000, coords=(item.latitude, item.longitude))[0], True)
     check("url", item.url.startswith("https://www.kijiji.ca/"), True)
     check("passe les filtres", filters.matches(item, CRITERIA)[0], True)
+
+
+def test_coordinates_beat_city_table():
+    print("coordonnees exactes")
+    # L'URL dit "montreal" mais les coordonnees pointent vers Vancouver :
+    # ce sont les coordonnees qui doivent trancher.
+    far = listing(url="https://www.kijiji.ca/v-cars-trucks/montreal/x/1")
+    far.latitude, far.longitude = 49.28, -123.12
+    check("coordonnees prioritaires sur l'URL", filters.matches(far, CRITERIA)[0], False)
+    near = listing(url="https://www.kijiji.ca/v-cars-trucks/lethbridge/x/1")
+    near.latitude, near.longitude = 45.50, -73.45
+    check("annonce proche gardee malgre l'URL", filters.matches(near, CRITERIA)[0], True)
 
 
 def test_geo():
@@ -176,6 +194,7 @@ if __name__ == "__main__":
     test_html_extraction()
     test_kijiji_next_data()
     test_geo()
+    test_coordinates_beat_city_table()
     test_english_manual()
     with tempfile.TemporaryDirectory() as tmpdir:
         test_state(Path(tmpdir))

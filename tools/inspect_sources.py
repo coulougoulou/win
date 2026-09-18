@@ -23,9 +23,12 @@ session = http_client.make_session()
 
 def inspect_autohebdo():
     print("\n=== AUTOHEBDO ===")
+    # Le site redirige (308) et reecrit nos parametres : on cherche la variante
+    # qui conserve le rayon de 1000 km au lieu de se limiter a la ville.
     for label, url, params in [
-        ("recherche canonique", autohebdo.SEARCH_URL, autohebdo._search_params(CRITERIA)),
-        ("recherche simple", autohebdo.SEARCH_URL, {"prx": "1000", "loc": "Saint-Hubert, QC"}),
+        ("params canoniques", autohebdo.SEARCH_URL, autohebdo._search_params(CRITERIA)),
+        ("code postal + prx", autohebdo.SEARCH_URL, {"prx": "1000", "loc": "J3Y 8Y9", "rcp": "100"}),
+        ("province qc", autohebdo.BASE_URL + "/autos/honda/civic/reg_qc/", {"rcp": "100"}),
     ]:
         response = http_client.get(session, url, params=params, attempts=1)
         if response is None:
@@ -37,10 +40,14 @@ def inspect_autohebdo():
         print("  prefixes de liens les plus frequents :")
         for prefix, count in Counter("/".join(h.split("/")[:3]) for h in hrefs).most_common(12):
             print(f"    {count:4d}  {prefix}")
-        candidates = [h for h in hrefs if re.search(r"civic", h, re.I)]
-        print(f"  liens contenant 'civic' : {len(candidates)}")
-        for href in candidates[:8]:
+        candidates = [h for h in hrefs if re.search(r"/annonces/[^/]*civic", h, re.I)]
+        print(f"  fiches /annonces/ contenant 'civic' : {len(candidates)}")
+        for href in candidates[:3]:
             print(f"    {href}")
+        parsed = autohebdo._parse(response.text)
+        print(f"  --> annonces extraites par le parseur : {len(parsed)}")
+        for item in parsed[:3]:
+            print(f"     {item.year} | {item.human_price()} | {item.human_odometer()} | {item.title[:70]}")
         # Un SPA laisse peu de liens mais souvent un blob JSON.
         for pattern in (r'window\[.([A-Za-z]+).\]\s*=', r'id="([A-Za-z_-]*[Dd]ata[A-Za-z_-]*)"'):
             hits = set(re.findall(pattern, response.text))
@@ -67,7 +74,8 @@ def inspect_kijiji():
         if not str(node.get("id", "")).isdigit():
             continue
         print("  cles du noeud :", sorted(node.keys()))
-        print("  extrait :", json.dumps(node, ensure_ascii=False)[:2000])
+        print("  attributs bruts :", json.dumps(node.get("attributes"), ensure_ascii=False)[:1200])
+        print("  location :", json.dumps(node.get("location"), ensure_ascii=False)[:400])
         break
 
 

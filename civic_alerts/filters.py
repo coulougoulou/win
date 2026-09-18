@@ -50,7 +50,14 @@ def matches(listing: Listing, criteria: Criteria) -> tuple[bool, str]:
 
     # Le rayon annonce par les sites n'est pas fiable (une execution reelle a
     # remonte Lethbridge malgre radius=1000), alors on verifie nous-memes.
-    in_range, detail = geo.within_radius(criteria.radius_km, listing.url, listing.location)
+    coords = (
+        (listing.latitude, listing.longitude)
+        if listing.latitude is not None and listing.longitude is not None
+        else None
+    )
+    in_range, detail = geo.within_radius(
+        criteria.radius_km, listing.url, listing.location, coords=coords
+    )
     if not in_range:
         return False, detail
 

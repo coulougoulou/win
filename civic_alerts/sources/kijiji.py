@@ -86,18 +86,100 @@ def _from_next_data(html: str) -> list[Listing]:
             # Sert a ajuster l'extraction quand Kijiji change la forme du payload.
             log.debug("Kijiji : exemple de noeud brut -> %s", blob[:1500])
             sampled = True
+        attrs = _attributes(node)
+        latitude, longitude = _coordinates(node)
+        description = node.get("description") if isinstance(node.get("description"), str) else ""
         listings[listing_id] = Listing(
             source=SOURCE,
             listing_id=listing_id,
             title=title,
             url=url if url.startswith("http") else BASE_URL + url,
             price=_price_from_node(node) or parse_price(blob),
-            year=parse_year(title) or parse_year(blob),
-            odometer_km=parse_odometer(blob),
-            transmission=parse_transmission(blob),
-            location=_first_str(node, ("location", "locationName", "city")),
+            year=parse_year(title) or _year_from_attributes(attrs) or parse_year(blob),
+            odometer_km=_odometer_from_attributes(attrs) or parse_odometer(f"{title} {description}"),
+            transmission=(
+                _transmission_from_attributes(attrs)
+                or parse_transmission(title)
+                or parse_transmission(description)
+            ),
+            location=_location_name(node),
+            latitude=latitude,
+            longitude=longitude,
         )
     return list(listings.values())
+
+
+_ODOMETER_KEYS = ("mileage", "kilometrage", "kilometre", "odometer", "km")
+_TRANSMISSION_KEYS = ("transmission", "boite", "gearbox")
+
+
+def _attributes(node: dict) -> dict[str, str]:
+    """Aplati la liste d'attributs Kijiji en {nom normalise: valeur}."""
+    flat: dict[str, str] = {}
+    raw = node.get("attributes")
+    if isinstance(raw, dict):
+        raw = [{"name": key, "value": value} for key, value in raw.items()]
+    if not isinstance(raw, list):
+        return flat
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name") or item.get("canonicalName") or item.get("key")
+        value = item.get("value") or item.get("canonicalValue") or item.get("values")
+        if isinstance(value, list):
+            value = " ".join(str(part) for part in value)
+        if isinstance(name, str) and value is not None:
+            flat[name.strip().lower()] = str(value)
+    return flat
+
+
+def _odometer_from_attributes(attrs: dict[str, str]) -> int | None:
+    for name, value in attrs.items():
+        if any(key in name for key in _ODOMETER_KEYS):
+            digits = re.sub(r"[^\d]", "", value)
+            if digits and 100 <= int(digits) <= 999_999:
+                return int(digits)
+    return None
+
+
+def _transmission_from_attributes(attrs: dict[str, str]) -> str | None:
+    for name, value in attrs.items():
+        if any(key in name for key in _TRANSMISSION_KEYS):
+            found = parse_transmission(value)
+            if found:
+                return found
+    return None
+
+
+def _year_from_attributes(attrs: dict[str, str]) -> int | None:
+    for name, value in attrs.items():
+        if "year" in name or "annee" in name:
+            year = parse_year(value)
+            if year:
+                return year
+    return None
+
+
+def _coordinates(node: dict) -> tuple[float | None, float | None]:
+    location = node.get("location")
+    coords = location.get("coordinates") if isinstance(location, dict) else None
+    if isinstance(coords, dict):
+        lat, lon = coords.get("latitude"), coords.get("longitude")
+        if isinstance(lat, (int, float)) and isinstance(lon, (int, float)):
+            return float(lat), float(lon)
+    return None, None
+
+
+def _location_name(node: dict) -> str | None:
+    location = node.get("location")
+    if isinstance(location, dict):
+        for key in ("name", "address", "city"):
+            value = location.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    if isinstance(location, str) and location.strip():
+        return location.strip()
+    return None
 
 
 def _first_str(node: dict, keys: tuple[str, ...]) -> str | None:

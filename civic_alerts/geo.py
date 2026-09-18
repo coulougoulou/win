@@ -102,7 +102,19 @@ def locate(*texts: str | None) -> tuple[str, float] | None:
     return None
 
 
-def within_radius(radius_km: int, *texts: str | None) -> tuple[bool, str]:
+def within_radius(
+    radius_km: int,
+    *texts: str | None,
+    coords: tuple[float, float] | None = None,
+) -> tuple[bool, str]:
+    # Kijiji fournit la latitude/longitude exactes de l'annonce : quand on les a,
+    # la table de villes ne sert plus a rien.
+    if coords is not None:
+        distance = haversine_km(ORIGIN, coords)
+        if distance <= radius_km:
+            return True, f"~{distance:.0f} km (coordonnees)"
+        return False, f"~{distance:.0f} km (coordonnees), hors rayon de {radius_km} km"
+
     found = locate(*texts)
     if found is None:
         return True, "ville inconnue (gardee)"

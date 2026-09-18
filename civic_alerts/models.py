@@ -16,6 +16,8 @@ class Listing:
     odometer_km: int | None = None
     transmission: str | None = None
     location: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
     @property
     def key(self) -> str:
