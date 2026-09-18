@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from civic_alerts import filters, notify, state
+from civic_alerts import filters, geo, notify, state
 from civic_alerts.config import Criteria
 from civic_alerts.models import Listing
 from civic_alerts.parsing import parse_odometer, parse_price, parse_transmission, parse_year
@@ -121,6 +121,30 @@ def test_kijiji_next_data():
     check("passe les filtres", filters.matches(item, CRITERIA)[0], True)
 
 
+def test_geo():
+    print("distance")
+    # Villes tirees d'une execution reelle du job.
+    check("Lethbridge hors rayon", geo.within_radius(1000, "https://www.kijiji.ca/v-cars-trucks/lethbridge/x/1")[0], False)
+    check("Dartmouth dans le rayon", geo.within_radius(1000, "https://www.kijiji.ca/v-cars-trucks/dartmouth/x/1")[0], True)
+    check("Beauce dans le rayon", geo.within_radius(1000, "https://www.kijiji.ca/v-cars-trucks/st-georges-de-beauce/x/1")[0], True)
+    check("Vancouver hors rayon", geo.within_radius(1000, "https://www.kijiji.ca/v-cars-trucks/vancouver/x/1")[0], False)
+    check("ville inconnue gardee", geo.within_radius(1000, "https://www.kijiji.ca/v-cars-trucks/ste-bidule-des-bois/x/1")[0], True)
+    check("accents normalises", geo.within_radius(1000, None, "Trois-Rivières, QC")[0], True)
+    check("pas de faux positif sur sous-chaine", geo.locate("new-londonderry-road"), None)
+    lethbridge = listing(url="https://www.kijiji.ca/v-cars-trucks/lethbridge/2018-honda-civic-sport/1")
+    check("filtre integre au pipeline", filters.matches(lethbridge, CRITERIA)[0], False)
+
+
+def test_english_manual():
+    print("transmission anglaise")
+    # Cas reel passe a travers le filtre lors de la premiere execution.
+    manual = listing(title="2018 Honda Civic Sport Turbo 6 Speed Hatchback", transmission=None)
+    manual.transmission = parse_transmission(manual.title)
+    check("6 Speed detecte", manual.transmission, "manual")
+    check("annonce rejetee", filters.matches(manual, CRITERIA)[0], False)
+    check("6-Spd detecte", parse_transmission("6-Spd Manual"), "manual")
+
+
 def test_state(tmp: Path):
     print("etat")
     path = tmp / "seen.json"
@@ -151,6 +175,8 @@ if __name__ == "__main__":
     test_filters()
     test_html_extraction()
     test_kijiji_next_data()
+    test_geo()
+    test_english_manual()
     with tempfile.TemporaryDirectory() as tmpdir:
         test_state(Path(tmpdir))
     test_messages()

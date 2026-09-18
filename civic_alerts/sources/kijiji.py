@@ -70,6 +70,7 @@ def _from_next_data(html: str) -> list[Listing]:
         return []
 
     listings: dict[str, Listing] = {}
+    sampled = False
     for node in deep_find_dicts(data, required_any=("title", "adTitle")):
         listing_id = _first_str(node, ("id", "adId", "listingId"))
         title = _first_str(node, ("title", "adTitle"))
@@ -81,6 +82,10 @@ def _from_next_data(html: str) -> list[Listing]:
             continue
 
         blob = json.dumps(node, ensure_ascii=False)
+        if not sampled:
+            # Sert a ajuster l'extraction quand Kijiji change la forme du payload.
+            log.debug("Kijiji : exemple de noeud brut -> %s", blob[:1500])
+            sampled = True
         listings[listing_id] = Listing(
             source=SOURCE,
             listing_id=listing_id,

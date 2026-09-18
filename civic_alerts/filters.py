@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from . import geo
 from .config import Criteria
 from .models import Listing
 
@@ -46,6 +47,12 @@ def matches(listing: Listing, criteria: Criteria) -> tuple[bool, str]:
     # que beaucoup d'annonces de particuliers ne la precisent tout simplement pas.
     if listing.transmission == "manual":
         return False, "transmission manuelle"
+
+    # Le rayon annonce par les sites n'est pas fiable (une execution reelle a
+    # remonte Lethbridge malgre radius=1000), alors on verifie nous-memes.
+    in_range, detail = geo.within_radius(criteria.radius_km, listing.url, listing.location)
+    if not in_range:
+        return False, detail
 
     return True, ""
 

@@ -13,7 +13,11 @@ _ODOMETER_RE = re.compile(r"(\d[\d\s.,]*)\s*(?:km|kilom)", re.IGNORECASE)
 _YEAR_RE = re.compile(r"\b(19[89]\d|20[0-4]\d)\b")
 
 _AUTOMATIC_HINTS = ("automatique", "automatic", "auto.", "cvt", "a/t", "boite auto")
-_MANUAL_HINTS = ("manuelle", "manual", "manuel", "m/t", "6 vitesses", "5 vitesses", "stick")
+_MANUAL_HINTS = (
+    "manuelle", "manual", "manuel", "m/t", "stick",
+    "6 vitesses", "5 vitesses", "6 speed", "5 speed", "6-speed", "5-speed",
+    "6spd", "6-spd", "5-spd", "boite manuelle",
+)
 
 
 def _to_int(raw: str) -> int | None:
