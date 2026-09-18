@@ -63,7 +63,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     kept = filters.apply(raw, CRITERIA)
-    log.info("%s annonces correspondent aux criteres (sur %s).", len(kept), len(raw))
+    before_dedupe = len(kept)
+    kept = filters.dedupe_across_sources(kept)
+    log.info(
+        "%s annonces correspondent aux criteres (sur %s), %s doublon(s) inter-sources retire(s).",
+        len(kept), len(raw), before_dedupe - len(kept),
+    )
 
     seen = {} if args.no_state else state.load(STATE_PATH)
     fresh = [listing for listing in kept if listing.key not in seen]

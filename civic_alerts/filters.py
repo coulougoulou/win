@@ -64,6 +64,29 @@ def matches(listing: Listing, criteria: Criteria) -> tuple[bool, str]:
     return True, ""
 
 
+def dedupe_across_sources(listings: list[Listing]) -> list[Listing]:
+    """Fusionne la meme voiture vue sur deux sites.
+
+    Un concessionnaire publie souvent la meme annonce sur Kijiji et AutoHebdo.
+    La signature annee + prix + kilometrage identifie le doublon de facon sure ;
+    une annonce a laquelle il manque un de ces trois champs n'est jamais
+    fusionnee, faute de certitude.
+    """
+    kept: list[Listing] = []
+    seen: set[tuple[int, int, int]] = set()
+    for listing in listings:
+        if listing.year is None or listing.price is None or listing.odometer_km is None:
+            kept.append(listing)
+            continue
+        signature = (listing.year, listing.price, listing.odometer_km)
+        if signature in seen:
+            log.debug("doublon inter-sources ignore [%s] %s", listing.source, listing.title)
+            continue
+        seen.add(signature)
+        kept.append(listing)
+    return kept
+
+
 def apply(listings: list[Listing], criteria: Criteria) -> list[Listing]:
     kept: list[Listing] = []
     for listing in listings:

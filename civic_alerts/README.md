@@ -72,8 +72,16 @@ sources/ -> annonces brutes -> filters.py -> state.py (deja vues ?) -> notify.py
   renvoyer chaque jour ; le job le recommit apres chaque execution. Une entree
   est oubliee apres 90 jours sans reapparaitre.
 - Les filtres sont **reappliques en Python** meme quand la source accepte deja
-  le filtre dans l'URL : les sites ignorent parfois silencieusement un
-  parametre, et une annonce hors criteres passerait.
+  le filtre dans l'URL. Ce n'est pas de la paranoia : une execution reelle a
+  remonte une annonce de Lethbridge (~2950 km) malgre un `radius=1000`, et
+  AutoHebdo reecrit silencieusement un rayon de 1000 km en « ville de
+  Saint-Hubert uniquement ».
+- La **distance** se calcule sur les coordonnees GPS de l'annonce quand la
+  source les fournit (Kijiji le fait), sinon sur une table de villes
+  canadiennes. Une ville inconnue est gardee, jamais rejetee.
+- La **meme voiture publiee sur les deux sites** n'est notifiee qu'une fois :
+  la signature annee + prix + kilometrage identifie le doublon. Une annonce a
+  laquelle il manque un de ces champs n'est jamais fusionnee.
 - Une annonce dont le prix, l'annee ou le kilometrage est illisible est
   **gardee** plutot que jetee (`keep_when_unknown`) : mieux vaut une annonce a
   verifier qu'une aubaine manquee. La transmission manuelle, elle, est un rejet

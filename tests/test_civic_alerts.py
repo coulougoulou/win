@@ -197,6 +197,24 @@ def test_autohebdo_parsing():
     check("passe les filtres", filters.matches(item, CRITERIA)[0], True)
 
 
+def test_dedupe():
+    print("doublons inter-sources")
+    # Cas reel : la meme Civic 2017 a 14 990 $ / 134 000 km sur les deux sites.
+    kijiji_item = listing(source="kijiji", listing_id="1", year=2017, price=14990, odometer_km=134000)
+    autohebdo_item = listing(source="autohebdo", listing_id="uuid", year=2017, price=14990, odometer_km=134000)
+    merged = filters.dedupe_across_sources([kijiji_item, autohebdo_item])
+    check("un seul exemplaire", len(merged), 1)
+    check("la premiere source gagne", merged[0].source, "kijiji")
+    autres = filters.dedupe_across_sources([kijiji_item, listing(source="autohebdo", listing_id="u2", price=13000)])
+    check("voitures differentes conservees", len(autres), 2)
+    # Sans les trois champs, la fusion serait un pari : on garde les deux.
+    flous = filters.dedupe_across_sources([
+        listing(source="kijiji", listing_id="a", odometer_km=None),
+        listing(source="autohebdo", listing_id="b", odometer_km=None),
+    ])
+    check("annonces incompletes non fusionnees", len(flous), 2)
+
+
 def test_state(tmp: Path):
     print("etat")
     path = tmp / "seen.json"
@@ -230,6 +248,7 @@ if __name__ == "__main__":
     test_geo()
     test_coordinates_beat_city_table()
     test_autohebdo_parsing()
+    test_dedupe()
     test_english_manual()
     with tempfile.TemporaryDirectory() as tmpdir:
         test_state(Path(tmpdir))
