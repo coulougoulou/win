@@ -18,5 +18,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -r civic_alerts/requirements.txt
       - run: python tests/test_civic_alerts.py
+      - name: Inspection de la structure des sources
+        run: python tools/inspect_sources.py
+
       - name: Recherche reelle en dry-run
         run: python -m civic_alerts.main --dry-run --no-state --verbose
